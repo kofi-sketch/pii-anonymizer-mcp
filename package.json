@@ -1,0 +1,19 @@
+{
+  "name": "pii-anonymizer-mcp",
+  "version": "1.0.0",
+  "description": "PII Anonymizer — MCP server for AI-native text sanitization",
+  "type": "module",
+  "main": "server.js",
+  "bin": {
+    "pii-anonymizer-mcp": "./server.js",
+    "pii-anonymize": "./cli.js",
+    "pii-scan": "./scan.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  }
+}

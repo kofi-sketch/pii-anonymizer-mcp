@@ -1,0 +1,30 @@
+{
+  "names": [
+    "Satoshi Nakamoto",
+    "kraken_admin_42",
+    "Jesse Powell"
+  ],
+
+  "nameFiles": [
+    "employees.txt",
+    "contractors.csv"
+  ],
+
+  "patterns": [
+    {
+      "regex": "EMP-\\d{6}",
+      "label": "Employee ID",
+      "placeholder": "EMPLOYEE_ID"
+    },
+    {
+      "regex": "TICKET-\\d+",
+      "label": "Support Ticket",
+      "placeholder": "TICKET_ID"
+    },
+    {
+      "regex": "KRK-[A-Z]{3}-\\d{4}",
+      "label": "Project Code",
+      "placeholder": "PROJECT_ID"
+    }
+  ]
+}
