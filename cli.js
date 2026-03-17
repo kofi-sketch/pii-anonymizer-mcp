@@ -5,16 +5,19 @@
  * 
  * Usage:
  *   echo "John Smith, SSN 123-45-6789" | pii-anonymize
+ *   pii-anonymize --address "John Smith, SSN 123-45-6789"
  *   pii-anonymize < input.txt
  *   pii-anonymize < input.txt > clean.txt
  *   pii-anonymize --file input.txt
  *   pii-anonymize --file input.txt --output clean.txt
- *   pii-anonymize --file input.txt --json          # full output with entity map
+ *   pii-anonymize --file input.txt --format json    # full output with entity map
+ *   pii-anonymize --file input.txt --format markdown # markdown report
  *   pii-anonymize --file input.txt --map map.json   # save entity map separately
  *   pii-anonymize --restore --file clean.txt --map map.json  # deanonymize
  *   pii-anonymize --config /path/to/pii-config.json --file input.txt
  *   pii-anonymize --list                           # list all detectors
  *   pii-anonymize --stats                          # show detection stats only
+ *   pii-anonymize --verbose --file input.txt       # include stats in output
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
@@ -40,18 +43,24 @@ PII Anonymizer CLI
 
 USAGE:
   echo "text" | pii-anonymize              Pipe text, get anonymized output
+  pii-anonymize --address "text here"      Inline text (no file/stdin needed)
   pii-anonymize --file input.txt           Read from file
   pii-anonymize --file in.txt -o out.txt   Write to file
-  pii-anonymize --file in.txt --json       Full JSON output with entity map
+  pii-anonymize --format json              Full JSON output with entity map
+  pii-anonymize --format markdown          Markdown-formatted report
+  pii-anonymize --verbose                  Include detection stats in output
   pii-anonymize --file in.txt --map m.json Save entity map to file
   pii-anonymize --restore --file clean.txt --map m.json  Restore originals
   pii-anonymize --list                     List all detectors
   pii-anonymize --stats --file in.txt      Show stats only (no output text)
 
 OPTIONS:
+  --address <text>       Inline text to anonymize (alternative to file/stdin)
   --file, -f <path>      Input file (otherwise reads stdin)
   --output, -o <path>    Output file (otherwise writes stdout)
-  --json                 Output full JSON (anonymized text + entity map + stats)
+  --format <type>        Output format: plain (default) | json | markdown
+  --json                 Shorthand for --format json
+  --verbose              Include detection summary with output
   --map <path>           Save/load entity map to/from JSON file
   --restore              Deanonymize mode (requires --map)
   --config <path>        Load custom names/patterns from config file
@@ -62,9 +71,16 @@ OPTIONS:
   --help, -h             Show this help
 
 EXAMPLES:
-  # Basic pipe
+  # Inline text
+  pii-anonymize --address "Call John at john@test.com"
+  # → Call [PERSON_NAME] at [EMAIL]
+
+  # Pipe mode
   echo "Call John at john@test.com" | pii-anonymize
   # → Call [PERSON_NAME] at [EMAIL]
+
+  # Markdown report with stats
+  pii-anonymize --file support-ticket.txt --format markdown --verbose
 
   # Process a file, save map for later restoration
   pii-anonymize --file support-ticket.txt --output clean.txt --map map.json
@@ -73,10 +89,13 @@ EXAMPLES:
   pii-anonymize --restore --file ai-response.txt --map map.json
 
   # Use custom org dictionary
-  pii-anonymize --config kraken-pii.json --file logs.txt
+  pii-anonymize --config custom-pii.json --file logs.txt
 
   # Only detect financial PII
   pii-anonymize --detectors credit_card,iban,routing_number,account_number --file data.txt
+
+  # Full UU integration example
+  pii-anonymize --format markdown --verbose --address "John Smith, SSN 123-45-6789" --detectors email,ssn,credit_card
 `);
   process.exit(0);
 }
@@ -146,9 +165,12 @@ if (configPath) {
 // ─── Read input ──────────────────────────────────────────────────────────────
 
 let inputText;
+const addressText = getArg("--address");
 const filePath = getArg("--file") || getArg("-f");
 
-if (filePath) {
+if (addressText) {
+  inputText = addressText;
+} else if (filePath) {
   if (!existsSync(filePath)) {
     console.error(`File not found: ${filePath}`);
     process.exit(1);
@@ -159,10 +181,15 @@ if (filePath) {
   try {
     inputText = readFileSync(0, "utf-8");
   } catch {
-    console.error("No input. Pipe text or use --file <path>");
+    console.error("No input. Use --address, --file, or pipe text via stdin");
     process.exit(1);
   }
 }
+
+// ─── Format & verbose flags ─────────────────────────────────────────────────
+
+const formatArg = getArg("--format") || (hasFlag("--json") ? "json" : "plain");
+const verbose = hasFlag("--verbose") || hasFlag("-v");
 
 // ─── Restore mode ────────────────────────────────────────────────────────────
 
@@ -209,34 +236,89 @@ if (hasFlag("--stats")) {
   process.exit(0);
 }
 
+// ─── Build verbose stats ─────────────────────────────────────────────────────
+
+function buildStats(result) {
+  const typeCounts = {};
+  for (const [tag] of Object.entries(result.entityMap)) {
+    const type = tag.replace(/^\[/, "").replace(/_?\d*\]$/, "");
+    typeCounts[type] = (typeCounts[type] || 0) + 1;
+  }
+  return typeCounts;
+}
+
+// ─── Markdown formatter ──────────────────────────────────────────────────────
+
+function formatMarkdown(result, verbose) {
+  let md = "# PII Anonymizer Report\n\n";
+  md += "## Anonymized Text\n\n";
+  md += "```\n" + result.anonymized + "\n```\n\n";
+
+  if (verbose || true) {
+    md += `## Summary\n\n`;
+    md += `- **PII items found:** ${result.count}\n`;
+    md += `- **Detector types triggered:** ${result.detectedTypes.join(", ") || "none"}\n\n`;
+
+    if (result.count > 0) {
+      const typeCounts = buildStats(result);
+      md += "## Detections\n\n";
+      md += "| Type | Count |\n";
+      md += "|------|-------|\n";
+      for (const [type, count] of Object.entries(typeCounts)) {
+        md += `| ${type} | ${count} |\n`;
+      }
+      md += "\n";
+
+      md += "## Entity Map\n\n";
+      md += "| Placeholder | Original |\n";
+      md += "|-------------|----------|\n";
+      for (const [placeholder, original] of Object.entries(result.entityMap)) {
+        md += `| \`${placeholder}\` | \`${original}\` |\n`;
+      }
+    }
+  }
+
+  return md;
+}
+
 // ─── Output ──────────────────────────────────────────────────────────────────
 
 const outputPath = getArg("--output") || getArg("-o");
 const mapPath = getArg("--map");
 
-if (hasFlag("--json")) {
-  const output = JSON.stringify({
+let finalOutput;
+
+if (formatArg === "json") {
+  finalOutput = JSON.stringify({
     anonymized: result.anonymized,
     entityMap: result.entityMap,
     piiCount: result.count,
     detectedTypes: result.detectedTypes,
-  }, null, 2);
+  }, null, 2) + "\n";
+} else if (formatArg === "markdown") {
+  finalOutput = formatMarkdown(result, verbose);
+} else {
+  // plain
+  finalOutput = result.anonymized;
+  if (verbose && result.count > 0) {
+    const typeCounts = buildStats(result);
+    finalOutput += "\n\n--- Detection Summary ---\n";
+    finalOutput += `PII items found: ${result.count}\n`;
+    for (const [type, count] of Object.entries(typeCounts)) {
+      finalOutput += `  ${type}: ${count}\n`;
+    }
+  }
+}
 
-  if (outputPath) {
-    writeFileSync(outputPath, output);
-    if (!hasFlag("--quiet") && !hasFlag("-q")) console.error(`JSON → ${outputPath}`);
-  } else {
-    process.stdout.write(output + "\n");
+if (outputPath) {
+  writeFileSync(outputPath, finalOutput);
+  if (!hasFlag("--quiet") && !hasFlag("-q")) {
+    console.error(`${result.count} PII items redacted → ${outputPath} (${formatArg})`);
   }
 } else {
-  if (outputPath) {
-    writeFileSync(outputPath, result.anonymized);
-    if (!hasFlag("--quiet") && !hasFlag("-q")) console.error(`${result.count} PII items redacted → ${outputPath}`);
-  } else {
-    process.stdout.write(result.anonymized);
-    if (!hasFlag("--quiet") && !hasFlag("-q") && result.count > 0) {
-      console.error(`\n[${result.count} PII items redacted]`);
-    }
+  process.stdout.write(finalOutput);
+  if (formatArg === "plain" && !verbose && !hasFlag("--quiet") && !hasFlag("-q") && result.count > 0) {
+    console.error(`\n[${result.count} PII items redacted]`);
   }
 }
 
