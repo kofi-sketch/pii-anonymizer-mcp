@@ -145,7 +145,7 @@ const API_KEYS = [
   "pk_live_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
   "github_pat_abcdefghijklmnopqrstuvwxyz_1234567890",
   "xoxb-FAKE123456789012-FAKEabcdefghijklmnopqrstuvwxyz",
-  "sk-abcdefghijklmnopqrstuvwxyz12345678901234567890",
+  "sk-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE",
   "ghp_zyxwvutsrqponmlkjihgfedcba1234567890ABCD",
 ];
 
