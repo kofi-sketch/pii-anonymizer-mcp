@@ -11,7 +11,9 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test/harness.mjs"
+    "test": "node test.js",
+    "test:large": "node test-large.js",
+    "test:15k": "node test-large.js 15000"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1"
